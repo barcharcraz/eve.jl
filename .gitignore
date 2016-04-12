@@ -1,3 +1,14 @@
+*.exe
+*.dll
+*.do
+*.o
+*.obj
+*.so
+*.dylib
+*.dSYM
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+*.ji
+*.sqlite
+.DS_Store
