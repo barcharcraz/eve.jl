@@ -1,17 +1,14 @@
 # deals with CCP's crest API
-
 module CREST
-
 using Requests
 using DataFrames
-using Dates
 using SQLite
+using Currencies
 using ProgressMeter
 using TimeSeries
-# this need to be down here since we gotta import dataframes before
-# SQLite. On a related note julia's module system is real bad
-include("SDE.jl")
-using .SDE
+
+using eve.SDE
+@usingcustomcurrency isk "Interstellar Kredit" 2
 export getLatestSellOrders
 export getLatestBuyOrders
 export getLatestOrders
@@ -101,6 +98,7 @@ end
 function marketHistoryEndpoint(region :: Number, itemID :: Number)
   publicEndpoint * "market/$region/types/$itemID/history/"
 end
+
 function processMarketData(jsonData)
   count = jsonData["totalCount"]
   #result = DataFrame([typeof(isk), Int, Int, Int, Dates.Day, DateTime],
@@ -116,19 +114,51 @@ function processMarketData(jsonData)
   result[:OrderID] = map(x -> x["id"], jsonData["items"])
   result
 end
+function convertMarketHistory(df :: DataFrame)
+  timestamps = map(DateTime, df[:Date])
+  nrows, ncols = size(df)
+  print(nrows)
+  local values = Array(Float64, nrows, 7)
+  values[:, 1] = df[:LowPrice]
+  values[:, 2] = df[:HighPrice]
+  values[:, 3] = df[:AvgPrice]
+  values[:, 4] = df[:Volume]
+  values[:, 5] = df[:OrderCount]
+  values[:, 6] = df[:BuyVolume]
+  values[:, 7] = df[:SellVolume]
+  TimeArray(timestamps.data, values,
+    ["LowPrice", "HighPrice", "AvgPrice", "Volume", "OrderCount", "BuyVolume", "SellVolume"])
+end
+function addAverageOrderVols(df :: DataFrame)
+  function computevols(buy, sell, avg, vol)
+    avg == buy && return [vol 0]
+    avg == sell && return [0, vol]
+    A = [buy sell; 1 1]
+    B = [vol * avg; vol]
+    X = A  \ B
+    return [X[1] X[2]]
+  end
+  vols = map(computevols, df[:LowPrice].data,
+                          df[:HighPrice].data,
+                          df[:AvgPrice].data,
+                          df[:Volume].data)
+  vols = vcat(vols...)
+  df[:BuyVolume] = vols[:, 1]
+  df[:SellVolume] = vols[:, 2]
+end
 function processMarketHistoryData(jsonData)
   df = Dates.DateFormat("yyyy-mm-ddTHH:MM:SS")
-  local timestamps :: Vector{DateTime}
-  local values = Array(Int64, jsonData["totalCount"], 5)
-  timestamps = map(x -> DateTime(x["date"], df), jsonData["items"])
-  values[:, 1] = map(x -> round(Int64, x["lowPrice"]), jsonData["items"])
-  values[:, 2] = map(x -> round(Int64, x["highPrice"]), jsonData["items"])
-  values[:, 3] = map(x -> round(Int64, x["avgPrice"]), jsonData["items"])
-  values[:, 4] = map(x -> x["volume"], jsonData["items"])
-  values[:, 5] = map(x -> x["orderCount"], jsonData["items"])
+  result = DataFrame()
+  result[:Date] = map(x -> DateTime(x["date"], df), jsonData["items"])
+  #timestamps = map(x -> DateTime(x["date"], df), jsonData["items"])
+  result[:LowPrice] = map(x -> x["lowPrice"], jsonData["items"])
+  result[:HighPrice] = map(x -> x["highPrice"], jsonData["items"])
+  result[:AvgPrice] = map(x -> x["avgPrice"], jsonData["items"])
+  result[:Volume] = map(x -> x["volume"], jsonData["items"])
+  result[:OrderCount] = map(x -> x["orderCount"], jsonData["items"])
+  addAverageOrderVols(result)
   #print(values)
-  TimeArray(timestamps, values,
-            ["LowPrice", "HighPrice", "AvgPrice", "Volume", "OrderCount"])
+  convertMarketHistory(result)
 end
 function getLatestSellOrders(regionID, itemID)
   uri = marketSellEndpoint(regionID)
@@ -249,15 +279,16 @@ CREATE TABLE history_data (
   id INTEGER PRIMARY KEY ASC,
   ItemID INTEGER,
   Date TEXT,
-  LowPrice INTEGER,
-  HighPrice INTEGER,
-  AvgPrice INTEGER,
+  LowPrice Real,
+  HighPrice Real,
+  AvgPrice Real,
   Volume INTEGER,
   OrderCount INTEGER,
   CONSTRAINT one_record UNIQUE (date, itemID)
 );
 """]
-#= Code to save and load market data =#
+
+# Code to save and load market data #
 function initializeDB(filename :: ASCIIString)
   db = SQLite.DB(filename)
   for e in schema
@@ -277,8 +308,8 @@ function storeHistoryData(db, itemID :: Int, data :: TimeArray)
     SQLite.bind!(s, 3, data[row]["LowPrice"].values[1])
     SQLite.bind!(s, 4, data[row]["HighPrice"].values[1])
     SQLite.bind!(s, 5, data[row]["AvgPrice"].values[1])
-    SQLite.bind!(s, 6, data[row]["Volume"].values[1])
-    SQLite.bind!(s, 7, data[row]["OrderCount"].values[1])
+    SQLite.bind!(s, 6, round(data[row]["Volume"].values[1]))
+    SQLite.bind!(s, 7, round(data[row]["OrderCount"].values[1]))
     SQLite.execute!(s)
   end
 end
@@ -333,35 +364,15 @@ function storeMarketData(dbname :: ASCIIString, data)
   end
   storeMarketData(db, data)
 end
-function addAverageOrderVols(ts :: TimeArray)
-  function computevols(buy, sell, avg, vol)
-    avg == buy && return (vol, 0)
-    avg == sell && return (0, vol)
-    A = [buy sell; 1 1]
-    B = [vol * avg; vol]
-    X = A  \ B
-    return (x[1], x[2])
-  end
-  vols = map((x,y) -> computevols(y[1], y[2], y[3], y[4]), ts)
-  TimeSeries.
-end
-function convertMarketHistory(df :: DataFrame)
-  timestamps = map(DateTime, df[:Date])
-  nrows, ncols = size(df)
-  print(nrows)
-  local values = Array(Int64, nrows, 5)
-  values[:, 1] = df[:LowPrice]
-  values[:, 2] = df[:HighPrice]
-  values[:, 3] = df[:AvgPrice]
-  values[:, 4] = df[:Volume]
-  values[:, 5] = df[:OrderCount]
-  TimeArray(timestamps.data, values,
-    ["LowPrice", "HighPrice", "AvgPrice", "Volume", "OrderCount"])
-end
+
+
+
+
 function loadMarketHistory(db, itemID :: Int)
   df = DataFrame(query(db, "SELECT * FROM history_data WHERE ItemID = ?", [itemID]))
   convertMarketHistory(df)
 end
+
 function loadMarketHistory(db, itemID :: Int, since :: DateTime)
   local timestamps :: Vector{DateTime}
   df = DataFrame(query(db, "SELECT * FROM history_data WHERE ItemID = ? AND Date > datetime(?)", [itemID, string(since)]))

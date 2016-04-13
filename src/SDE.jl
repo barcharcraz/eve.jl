@@ -10,7 +10,7 @@ const sdemd5Addr = "https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2.md5
 const sdeAddr = "https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2"
 
 
-global db = SQLite.DB("sqlite-latest.sqlite")
+global db = SQLite.DB(Pkg.dir("eve", "data", "sqlite-latest.sqlite"))
 #increase database read speed at the cost of
 #data integrety. We don't care since we never write
 #so even without good transaction garentees we're fine
