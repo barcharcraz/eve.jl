@@ -2,6 +2,8 @@
 # as well as parsing logs
 
 module LocalData
+using eve.SDE
+using eve.MarketDatas
 using DataFrames
 # Log import
 export latestLog
@@ -62,6 +64,26 @@ function importOrders(typePrefix = "Corporation")
 end
 function importMarketLog(item = "", region = "")
   o = get(latestMarketLog())
-  readtable(o.path, truestrings=["True"], falsestrings=["False"])[1:14]
+  res = readtable(o.path, truestrings=["True"], falsestrings=["False"])[1:14]
+  names!(res, [:Price,
+               :Quantity,
+               :TypeID,
+               :Range,
+               :OrderID,
+               :QuantityEntered,
+               :MinQuantity,
+               :bid,
+               :Issued,
+               :Duration,
+               :StationID,
+               :RegionID,
+               :solarSystemID,
+               :Jumps])
+  (sells, buys) = groupby(res, :bid)
+  MarketData(itemID(o.item),
+             Logs,
+             o.timestamp,
+             sells,
+             buys)
 end
 end

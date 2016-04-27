@@ -28,14 +28,36 @@ function DataFrameView(df)
   end
   view
 end
-function MarginToolView(itemName, maxbuy, minsell)
+type MarginDataView <: Gtk.GtkGrid
+  handle :: Gtk.GObject
+  ItemName :: Label
+  MaxBuy :: Label
+  MinSell :: Label
+  Margin :: Label
+  function MarginDataView()
+    grid = Gtk.@GtkGrid()
+    setproperty!(grid, "orientation", 1)
+    ItemName = @Label("No Item")
+    MaxBuy = @Label("Max Buy: -")
+    MinSell = @Label("Min Sell: -")
+    Margin = @Label("Margin: -")
+    push!(grid, ItemName)
+    push!(grid, MaxBuy)
+    push!(grid, MinSell)
+    push!(grid, Margin)
+    Gtk.gobject_move_ref(new(grid),grid)
+  end
+end
+function UpdateMarginToolView(view, data :: eve.ItemSummery)
+
+end
+function MarginToolView(data :: eve.ItemSummery)
   grid = @Grid()
   setproperty!(grid, "orientation", 1)
-  push!(grid, @Label(itemName))
-  push!(grid, @Label("Max Buy: $maxbuy"))
-  push!(grid, @Label("Min Sell: $minsell"))
-  margin = (minsell - maxbuy)/minsell
-  push!(grid, @Label("Margin: $(100margin)%"))
+  push!(grid, @Label(string(data.itemID)))
+  push!(grid, @Label("Max Buy: $(data.maxbuy)"))
+  push!(grid, @Label("Min Sell: $(data.minsell)"))
+  push!(grid, @Label("Margin: $(100data.margin)%"))
   grid
 end
 function HotkeyFilter(xevt :: Ptr{WinMsg}, gevt :: Ptr{Void}, data :: Ptr{Void})
@@ -59,8 +81,10 @@ function UITest()
   panes[1] = listViewSells
   panes[2] = listViewBuys
   push!(f, panes)
-
-  margin = MarginToolView("Raven", 100000000, 200000000)
+  margin = @Grid()
+  push!(margin, MarginDataView())
+  importOrdersBtn = @Button("Import Orders")
+  push!(margin, importOrdersBtn)
 
   tabs = @Notebook()
   push!(tabs, f, "Orders")
@@ -68,7 +92,7 @@ function UITest()
 
   push!(win, tabs)
   gdkWin = Gtk.gdk_window(win)
-  ccall( (:gdk_window_add_filter, Gtk.libgdk), Void, (Ptr{Void}, Ptr{Void}, Ptr{Void}),
+  ccall( (:gdk_window_add_filter, Gtk.libgdk), Void, (Ptr{Void}, Ptr{Void}, Int64),
     gdkWin,
     cfunction(HotkeyFilter, Cint, (Ptr{WinMsg}, Ptr{Void}, Ptr{Void})),
     0)

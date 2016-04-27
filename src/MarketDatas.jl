@@ -3,15 +3,16 @@ using DataFrames
 using TimeSeries
 using SQLite
 
-export MarketData, storeMarketData
-export DataSource
-@enum DataSource Logs CREST EveCentral
+export MarketData, storeMarketData, loadMarketData, loadHistoryData
+export storeHistoryData
+export DataSource, Logs, CREST, EveCentral, Unknown
+@enum DataSource Logs CREST EveCentral Unknown
 type MarketData
   itemID :: Int64
   source :: DataSource
   timeFetched :: DateTime
-  sells :: DataFrame
-  buys :: DataFrame
+  sells :: AbstractDataFrame
+  buys :: AbstractDataFrame
 end
 
 
@@ -21,6 +22,7 @@ CREATE TABLE metadata (
 id INTEGER PRIMARY KEY ASC,
 itemID INTEGER,
 timeFetched TEXT
+source INTEGER
 );""",
 """CREATE TABLE sells (
 id INTEGER PRIMARY KEY ASC,
@@ -112,8 +114,8 @@ function storePriceData(db, table, mID, data :: DataFrame)
 end
 
 function storeMarketData(db :: SQLite.DB, data :: MarketData)
-  query(db, "INSERT INTO metadata (itemID, timeFetched) VALUES (?, ?)",
-        [data.itemID, string(data.timeFetched)])
+  query(db, "INSERT INTO metadata (itemID, timeFetched, source) VALUES (?, ?, ?)",
+        [data.itemID, string(data.timeFetched), Int(data.source)])
   r = query(db, "SELECT last_insert_rowid()")
   mID :: Int = get(r.data[1][1])
   storePriceData(db, "sells", mID, data.sells)
@@ -139,17 +141,33 @@ end
 
 
 
-function loadMarketHistory(db, itemID :: Int)
+function loadHistoryData(db, itemID :: Int)
   df = DataFrame(query(db, "SELECT * FROM history_data WHERE ItemID = ?", [itemID]))
-  convertMarketHistory(df)
+  #convertMarketHistory(df)
 end
 
-function loadMarketHistory(db, itemID :: Int, since :: DateTime)
+function loadHistoryData(db, itemID :: Int, since :: DateTime)
   local timestamps :: Vector{DateTime}
   df = DataFrame(query(db, "SELECT * FROM history_data WHERE ItemID = ? AND Date > datetime(?)", [itemID, string(since)]))
-  convertMarketHistory(df)
+  #convertMarketHistory(df)
 end
 
-function loadMarketData(db :: SQLite.DB)
+function loadMarketData(db :: SQLite.DB, itemID :: Int, fresh :: DateTime)
+  metadata = DataFrame(query(db, "SELECT * FROM metadata WHERE ItemID = ? AND timeFetched > datetime(?) ORDER BY timeFetched DESC", [itemID, string(since)]))
+  (rows, cols) = size(metadata)
+  if rows == 0
+    return MarketData(0, DateTime(2003, 5, 5), Unknown,
+                      DataFrame(OrderID = [], Price = [], Location = [], Quantity = [], MinQuantity = [], Duration = [], Issued = []),
+                      DataFrame(OrderID = [], Price = [], Location = [], Quantity = [], MinQuantity = [], Duration = [], Issued = []))
+  else
+    df = Dates.DateFormat("yyyy-mm-ddTHH:MM:SS")
+    sells = DataFrame(query(db, "SELECT * FROM sells WHERE mID = ?", [Int(metadata[:id][1])]))
+    buys = DataFrame(query(db, "SELECT * FROM buys WHERE mID = ?", [Int(metadata[:id][1])]))
+    return MarketData(Int(metadata[:itemID][1]),
+                      DataSource(metadata[:source][1]),
+                      DateTime(metadata[:timeFetched][1]).
+                      sells,
+                      buys)
+  end
 end
 end
