@@ -63,7 +63,7 @@ function importOrders(typePrefix = "Corporation")
   readtable(path, truestrings=["True"], falsestrings=["False"])[1:23]
 end
 function importMarketLog(item = "", region = "")
-  o = get(latestMarketLog())
+  o = get(latestMarketLog(item, region))
   res = readtable(o.path, truestrings=["True"], falsestrings=["False"])[1:14]
   names!(res, [:Price,
                :Quantity,

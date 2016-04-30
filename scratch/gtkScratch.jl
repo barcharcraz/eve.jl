@@ -1,3 +1,4 @@
+module s
 using Gtk.ShortNames
 
 import eve
@@ -8,7 +9,7 @@ immutable WinPoint
   y :: Clong
 end
 immutable WinMsg
-  hwnd :: Ptr{Void}
+  hwnd :: Ptr{GObject}
   msg :: Cuint
   wparam :: Ptr{Cuint}
   lparam :: Ptr{Void}
@@ -28,29 +29,7 @@ function DataFrameView(df)
   end
   view
 end
-type MarginDataView <: Gtk.GtkGrid
-  handle :: Gtk.GObject
-  ItemName :: Label
-  MaxBuy :: Label
-  MinSell :: Label
-  Margin :: Label
-  function MarginDataView()
-    grid = Gtk.@GtkGrid()
-    setproperty!(grid, "orientation", 1)
-    ItemName = @Label("No Item")
-    MaxBuy = @Label("Max Buy: -")
-    MinSell = @Label("Min Sell: -")
-    Margin = @Label("Margin: -")
-    push!(grid, ItemName)
-    push!(grid, MaxBuy)
-    push!(grid, MinSell)
-    push!(grid, Margin)
-    Gtk.gobject_move_ref(new(grid),grid)
-  end
-end
-function UpdateMarginToolView(view, data :: eve.ItemSummery)
 
-end
 function MarginToolView(data :: eve.ItemSummery)
   grid = @Grid()
   setproperty!(grid, "orientation", 1)
@@ -60,11 +39,11 @@ function MarginToolView(data :: eve.ItemSummery)
   push!(grid, @Label("Margin: $(100data.margin)%"))
   grid
 end
-function HotkeyFilter(xevt :: Ptr{WinMsg}, gevt :: Ptr{Void}, data :: Ptr{Void})
+function HotkeyFilter(xevt :: Ptr{WinMsg}, gevt :: Ptr{Gtk.GdkEventKey}, data :: Ptr{Void})
   evt = unsafe_load(xevt)
   if evt.msg == 0x0312
-    print("Hotkey Pressed")
     return Cint(2)
+    GAccessor.
   else
     return Cint(0)
   end
@@ -82,20 +61,23 @@ function UITest()
   panes[2] = listViewBuys
   push!(f, panes)
   margin = @Grid()
-  push!(margin, MarginDataView())
+  dv = MarginDataView()
+  push!(margin, dv)
   importOrdersBtn = @Button("Import Orders")
   push!(margin, importOrdersBtn)
-
+  signal_connect(importOrdersBtn, "clicked") do widget
+    UpdateMarginToolView(dv, eve.summerizeItem(eve.importMarketLog()))
+  end
   tabs = @Notebook()
   push!(tabs, f, "Orders")
   push!(tabs, margin, "Margin Tool")
 
   push!(win, tabs)
   gdkWin = Gtk.gdk_window(win)
-  ccall( (:gdk_window_add_filter, Gtk.libgdk), Void, (Ptr{Void}, Ptr{Void}, Int64),
+  ccall( (:gdk_window_add_filter, Gtk.libgdk), Void, (Ptr{Void}, Ptr{TreeView}, Ptr{Void}),
     gdkWin,
     cfunction(HotkeyFilter, Cint, (Ptr{WinMsg}, Ptr{Void}, Ptr{Void})),
-    0)
+    pointer_from_objref(listViewSells))
   hwnd = ccall( (:gdk_win32_window_get_impl_hwnd, Gtk.libgdk),  Ptr{Void}, (Ptr{Void},), gdkWin)
   result = ccall( (:RegisterHotKey, "User32"), stdcall, Cint, (Ptr{Void}, Cint, Cuint, Cuint),
     hwnd, 1, 0, 0x28)
@@ -105,4 +87,5 @@ function UITest()
     print(selected(selection))
   end
   showall(win)
+end
 end
