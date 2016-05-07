@@ -90,6 +90,9 @@ end
 function marketSellEndpoint(region :: Number)
   publicEndpoint * "market/$region/orders/sell/"
 end
+function marketOrdersEndpoint(region :: Number)
+  publicEndpoint * "market/$region/orders/"
+end
 function marketHistoryEndpoint(region :: Number, itemID :: Number)
   publicEndpoint * "market/$region/types/$itemID/history/"
 end
@@ -107,6 +110,7 @@ function processMarketData(jsonData)
   result[:Duration] = map(x -> Dates.Day(x["duration"]), jsonData["items"])
   result[:Issued] = map(x -> DateTime(x["issued"], df), jsonData["items"])
   result[:OrderID] = map(x -> x["id"], jsonData["items"])
+  result[:Bid] = map(x -> x["buy"], jsonData["items"])
   result
 end
 function convertMarketHistory(df :: DataFrame)
@@ -179,6 +183,8 @@ function getLatestBuyOrders(regionID, itemID)
 end
 function getLatestOrders(regionID, item :: Int)
   result = MarketData(item, now(Dates.UTC), DataFrame(), DataFrame())
+  uri = 
+  resp = @ratelimit get()
   result.sells = getLatestSellOrders(regionID, item)
   result.buys = getLatestBuyOrders(regionID, item)
   result

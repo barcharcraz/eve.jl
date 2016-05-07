@@ -59,7 +59,12 @@ function latestMarketLog(item = "", region = "")
   end
 end
 function importOrders(typePrefix = "Corporation")
+  orders = latestOrderLog()
+  if isnull(orders)
+    return DataFrame()
+  end
   path = get(latestOrderLog())[1]
+
   readtable(path, truestrings=["True"], falsestrings=["False"])[1:23]
 end
 function importMarketLog(item = "", region = "")
